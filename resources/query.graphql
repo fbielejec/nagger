@@ -1,0 +1,37 @@
+query RepoView($owner: String!, $name: String!) {
+  repository(name: $name, owner: $owner) {
+    pullRequests(states: OPEN, first: 10) {
+      totalCount
+      nodes {
+        id
+        title
+        url
+        
+        reviews(first: 3) {
+          totalCount
+          nodes {
+            author {
+              __typename
+              ... on User {
+                login
+              }
+            }
+          }
+        }
+        
+        reviewRequests(first: 3) {
+          totalCount
+          nodes {
+            requestedReviewer {
+              __typename
+              ... on User {
+                login
+              }
+            }
+          }
+        }
+        
+      }
+    }
+  }
+}
