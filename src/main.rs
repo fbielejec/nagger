@@ -1,14 +1,16 @@
-use graphql_client::{GraphQLQuery, Response};
-use serde::*;
-use std::error::Error;
-use reqwest;
-use log::{debug, info, error};
-use std::env;
+#[macro_use]
+extern crate maplit;
 
-// use graphql_client::*;
-// use structopt::StructOpt;
-// use prettytable::*;
-// use anyhow::*;
+use async_std::prelude::*;
+use async_std::stream;
+use graphql_client::{GraphQLQuery, Response};
+use log::{info, error};
+use reqwest::blocking::Client;
+use serde_json::{json, Value};
+use std::collections::HashMap;
+use std::collections::HashSet;
+use std::env;
+use std::time::Duration;
 
 type URI = String;
 
@@ -22,46 +24,75 @@ struct RepoView;
 
 #[derive(Debug)]
 #[derive(Clone)]
-struct Config {
+struct Config<'a> {
     owner: String,
     name: String,
     github_api_token: String,
     log_level: String,
+    user_to_id: HashMap<&'a str, &'a str>,
+    interval: usize
 }
 
-fn main() -> Result<(), anyhow::Error> {
+#[async_std::main]
+async fn main()
+              -> Result<(), anyhow::Error>
+{
 
     let config = Config {
         owner: get_env_var ("OWNER",  None)?,
         name: get_env_var ("NAME", None)?,
         github_api_token: get_env_var ("GH_API_TOKEN", None)?,
-        log_level: get_env_var ("LOGGING_LEVEL", Some (String::from ("info")))?
+        log_level: get_env_var ("LOGGING_LEVEL", Some (String::from ("info")))?,
+        interval: 86400,
+        // TODO : read from RON file
+        user_to_id: hashmap! {
+            "yenda" => "UHWKUD413",
+            "jpmonettas" => "U018E11HXL3",
+            "jbdtky" => "U018E11HXL3"
+        }
     };
 
-    env::set_var("RUST_LOG", config.log_level);
+    env::set_var("RUST_LOG", &config.log_level);
     env_logger::init();
 
     let query = RepoView::build_query(repo_view::Variables {
-        owner: config.owner,
-        name: config.name
+        owner: String::from (&config.owner),
+        name: String::from (&config.name)
     });
 
-    let client = reqwest::blocking::Client::builder()
+    let client = Client::builder()
         .user_agent("graphql-rust/0.9.0")
-        .build()?;
+        .build()
+        .unwrap ();
+
+    // TODO : every 24 h
+    let mut interval = stream::interval(Duration::from_secs(3));
+
+    while interval.next().await.is_some () {
+        nag_revieweres (&config, &client, &query)?;
+    }
+
+    Ok (())
+}
+
+fn nag_revieweres (config : &Config<'_>,
+                   client : &Client,
+                   query : &graphql_client::QueryBody<repo_view::Variables>)
+                   -> Result<(), anyhow::Error>
+{
+
+    let Config { user_to_id, github_api_token, .. } = config;
 
     let response = client
         .post("https://api.github.com/graphql")
-        .bearer_auth(config.github_api_token)
+        .bearer_auth(github_api_token)
         .json(&query)
-        .send()?;
+        .send()
+        .unwrap ();
 
-    // info! ("GH response: {:#?}", response);
-    response.error_for_status_ref()?;
+    response.error_for_status_ref().unwrap ();
 
-    let response_body: Response<repo_view::ResponseData> = response.json()?;
-    // info!("{:?}", response_body);
-
+    let response_body: Response<repo_view::ResponseData> = response.json().unwrap ();
     let response_data: repo_view::ResponseData = response_body.data.expect("missing response data");
 
     &response_data
@@ -77,43 +108,62 @@ fn main() -> Result<(), anyhow::Error> {
                       let pull_request = pull_request.unwrap ();
                       let review_requests = pull_request.review_requests.unwrap ();
                       let reviews = pull_request.reviews.unwrap ();
+
+                      let title = pull_request.title;
+                      let url = pull_request.url;
+
                       if review_requests.total_count > 0 {
 
-                          info!("{:?}", pull_request.title);
+                          let requested_reviewers =
+                              review_requests.nodes.unwrap ().into_iter().map (| review_request | {
+                                  match review_request.unwrap ().requested_reviewer.unwrap () {
+                                      repo_view::RepoViewRepositoryPullRequestsNodesReviewRequestsNodesRequestedReviewer::User(user) => {
+                                          user.login
+                                      },
+                                      not_a_user => {
+                                          error!("Unknown variant {:#?}", not_a_user);
+                                          panic!("Unknown variant {:#?}", not_a_user);
+                                      },
+                                  }
+                              }).collect::<HashSet<String>>();
 
-                          info!("Requested reviewers");
+                          let reviewers_reviewed =
+                              reviews.nodes.unwrap ().into_iter().map (| review | {
+                                  match review.unwrap ().author.unwrap ().on {
+                                      repo_view::RepoViewRepositoryPullRequestsNodesReviewsNodesAuthorOn::User (user) => {
+                                          user.login
+                                      },
+                                      other => {
+                                          error!("Unknown variant {:#?}", other);
+                                          panic!("Unknown variant {:#?}", other);
+                                      },
+                                  }
+                              }).collect::<HashSet<String>>();
 
-                          // let mut requested_reviewers: HashSet::new() =
-                          review_requests.nodes.unwrap ().into_iter().for_each (| review_request | {
-                              match review_request.unwrap ().requested_reviewer.unwrap () {
-                                  repo_view::RepoViewRepositoryPullRequestsNodesReviewRequestsNodesRequestedReviewer::User(user) => {
-                                      info!("{:?}", user.login);
-                                      // user.login
-                                  },
-                                  not_a_user => {
-                                      error!("Unknown variant {:#?}", not_a_user);
-                                      panic!("Unknown variant {:#?}", not_a_user);
-                                  },
-                              }
-                          });//.collect ();
+                          info!("Pull request title {:?}", title);
+                          info!("All requested reviewers {:?}", requested_reviewers);
+                          info!("Reviewers that reviewed: {:?}", reviewers_reviewed);
+                          info!("{:?}", url);
 
-                          info!("Reviewers that reviewed:");
+                          requested_reviewers
+                              .difference(&reviewers_reviewed)
+                              .into_iter ()
+                              .for_each (| user | {
 
-                          reviews.nodes.unwrap ().into_iter().for_each (| review | {
-                              match review.unwrap ().author.unwrap ().on {
-                                  repo_view::RepoViewRepositoryPullRequestsNodesReviewsNodesAuthorOn::User (user) => {
-                                      info!("{:?}", user.login);
-                                  },
-                                  other => {
-                                      error!("Unknown variant {:#?}", other);
-                                      panic!("Unknown variant {:#?}", other);
-                                  },
-                              }
-                          });
+                                  let user_id = user_to_id.get (&user.as_str ()).unwrap ();
+                                  let body = make_request_body (&title, &url, &user_id);
+
+                                  let response = client
+                                      .post("https://hooks.slack.com/services/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")
+                                      .json(&body)
+                                      .send()
+                                      .unwrap ();
+
+                                  response.error_for_status_ref().unwrap ();
+                              });
                       }
                   });
 
-    // println!("Hello, world!");
     Ok (())
 }
 
@@ -130,6 +180,39 @@ fn get_env_var (var : &str, default: Option<String> ) -> Result<String, anyhow::
             }
         }
     }
+}
+
+fn make_request_body (title : &str, url : &str, user : &str) -> Value {
+    json!({
+        "blocks": [
+            {
+                "type":"header",
+                "text": {
+                    "type":"plain_text",
+                    "text":"Review request",
+                    "emoji":true
+                }
+            },
+            {
+                "type":"section",
+                "text":{
+                    "type":"mrkdwn",
+                    "text": format!("<@{}> you are requested as a reviewer for {}", user, title)
+                },
+                "accessory":{
+                    "type":"button",
+                    "text":{
+                        "type":"plain_text",
+                        "text":"Review",
+                        "emoji":true
+                    },
+                    "value": "click_me_123",
+                    "url": url,
+                    "action_id":"button-action"
+                }
+            }
+        ]
+    })
 }
 
 pub fn print_type_of<T>(_: &T) {
