@@ -57,6 +57,8 @@ async fn main()
     env::set_var("RUST_LOG", &config.log_level);
     env_logger::init();
 
+    info!("Running with config {:#?}", &config);
+
     let query = RepoView::build_query(repo_view::Variables {
         owner: String::from (&config.owner),
         name: String::from (&config.name)
