@@ -4,7 +4,7 @@ extern crate maplit;
 use async_std::prelude::*;
 use async_std::stream;
 use graphql_client::{GraphQLQuery, Response};
-use log::{info, error};
+use log::{debug, info, warn, error};
 use reqwest::blocking::Client;
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -28,9 +28,10 @@ struct Config<'a> {
     owner: String,
     name: String,
     github_api_token: String,
+    slack_hook_url: String,
     log_level: String,
     user_to_id: HashMap<&'a str, &'a str>,
-    interval: usize
+    interval: u64,
 }
 
 #[async_std::main]
@@ -39,11 +40,12 @@ async fn main()
 {
 
     let config = Config {
-        owner: get_env_var ("OWNER",  None)?,
-        name: get_env_var ("NAME", None)?,
+        owner: get_env_var ("REPO_OWNER",  None)?,
+        name: get_env_var ("REPO_NAME", None)?,
         github_api_token: get_env_var ("GH_API_TOKEN", None)?,
+        slack_hook_url: get_env_var ("SLACK_HOOK_URL", None)?,
         log_level: get_env_var ("LOGGING_LEVEL", Some (String::from ("info")))?,
-        interval: 86400,
+        interval: 5, //86400, 43200
         // TODO : read from RON file
         user_to_id: hashmap! {
             "yenda" => "UHWKUD413",
@@ -65,8 +67,7 @@ async fn main()
         .build()
         .unwrap ();
 
-    // TODO : every 24 h
-    let mut interval = stream::interval(Duration::from_secs(3));
+    let mut interval = stream::interval(Duration::from_secs(config.interval));
 
     while interval.next().await.is_some () {
         nag_revieweres (&config, &client, &query)?;
@@ -81,7 +82,7 @@ fn nag_revieweres (config : &Config<'_>,
                    -> Result<(), anyhow::Error>
 {
 
-    let Config { user_to_id, github_api_token, .. } = config;
+    let Config { user_to_id, github_api_token, slack_hook_url, .. } = config;
 
     let response = client
         .post("https://api.github.com/graphql")
@@ -95,7 +96,7 @@ fn nag_revieweres (config : &Config<'_>,
     let response_body: Response<repo_view::ResponseData> = response.json().unwrap ();
     let response_data: repo_view::ResponseData = response_body.data.expect("missing response data");
 
-    &response_data
+    response_data
         .repository
         .expect("missing repository")
         .pull_requests
@@ -153,13 +154,24 @@ fn nag_revieweres (config : &Config<'_>,
                                   let user_id = user_to_id.get (&user.as_str ()).unwrap ();
                                   let body = make_request_body (&title, &url, &user_id);
 
+                                  debug!("{:?}", body);
+
                                   let response = client
-                                      .post("https://hooks.slack.com/services/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")
+                                      .post(slack_hook_url)
                                       .json(&body)
                                       .send()
                                       .unwrap ();
 
-                                  response.error_for_status_ref().unwrap ();
+                                  match response.error_for_status_ref() {
+                                      Ok(_) => {
+                                          info!("Succesfully posted a message to slack webhook")
+                                      },
+                                      Err(error) => {
+                                          warn!("Error: error posting message to slack webhook: {:#?}", error)
+                                      },
+
+                                  }
+
                               });
                       }
                   });
@@ -190,21 +202,20 @@ fn make_request_body (title : &str, url : &str, user : &str) -> Value {
                 "text": {
                     "type":"plain_text",
                     "text":"Review request",
-                    "emoji":true
+                    "emoji": true
                 }
             },
             {
-                "type":"section",
-                "text":{
-                    "type":"mrkdwn",
-                    "text": format!("<@{}> you are requested as a reviewer for {}", user, title)
+                "type" : "section",
+                "text" : {"type":"mrkdwn",
+                          "text": format!("<@{}> you are requested as a reviewer for {}", user, title)
                 },
-                "accessory":{
-                    "type":"button",
-                    "text":{
+                "accessory" : {
+                    "type" : "button",
+                    "text" : {
                         "type":"plain_text",
                         "text":"Review",
-                        "emoji":true
+                        "emoji": true
                     },
                     "value": "click_me_123",
                     "url": url,
