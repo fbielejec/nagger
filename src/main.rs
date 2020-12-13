@@ -45,7 +45,7 @@ async fn main()
         github_api_token: get_env_var ("GH_API_TOKEN", None)?,
         slack_hook_url: get_env_var ("SLACK_HOOK_URL", None)?,
         log_level: get_env_var ("LOGGING_LEVEL", Some (String::from ("info")))?,
-        interval: 5, //86400, 43200
+        interval: 43200, // 12h
         // TODO : read from RON file
         user_to_id: hashmap! {
             "yenda" => "UHWKUD413",
