@@ -68,7 +68,6 @@ async fn main() -> Result<(), anyhow::Error> {
         .unwrap ();
 
     let mut interval = stream::interval(Duration::from_secs(config.interval));
-
     while interval.next().await.is_some () {
         nag_revieweres (&config, &client, &query)?;
     }

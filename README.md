@@ -1,6 +1,6 @@
 # nagger
 
-A tool to remind egoistic engineers to review pull requests of their peers.
+A tool to remind lazy engineers to review pull requests of their peers.
 
 # run it
 
