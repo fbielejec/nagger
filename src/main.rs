@@ -35,9 +35,7 @@ struct Config<'a> {
 }
 
 #[async_std::main]
-async fn main()
-              -> Result<(), anyhow::Error>
-{
+async fn main() -> Result<(), anyhow::Error> {
 
     let config = Config {
         owner: get_env_var ("REPO_OWNER",  None)?,
@@ -45,7 +43,7 @@ async fn main()
         github_api_token: get_env_var ("GH_API_TOKEN", None)?,
         slack_hook_url: get_env_var ("SLACK_HOOK_URL", None)?,
         log_level: get_env_var ("LOGGING_LEVEL", Some (String::from ("info")))?,
-        interval: 43200, // 12h
+        interval: get_env_var ("TIMER_INTERVAL", Some (String::from ("43200")))?.parse::<u64>()?, // 12h
         // TODO : read from RON file
         user_to_id: hashmap! {
             "yenda" => "UHWKUD413",
@@ -153,9 +151,17 @@ fn nag_revieweres (config : &Config<'_>,
                               .into_iter ()
                               .for_each (| user | {
 
-                                  let user_id = user_to_id.get (&user.as_str ()).unwrap ();
-                                  let body = make_request_body (&title, &url, &user_id);
+                                  let user_id = match user_to_id.get (&user.as_str ()) {
+                                      Some(user_id) => {
+                                          user_id
+                                      },
+                                      None => {
+                                          warn!("No id for user: {}", user);
+                                          user.as_str ()
+                                      },
+                                  };
 
+                                  let body = make_request_body (&title, &url, &user_id);
                                   debug!("{:?}", body);
 
                                   let response = client
