@@ -48,7 +48,7 @@ async fn main() -> Result<(), anyhow::Error> {
         user_to_id: hashmap! {
             "yenda" => "UHWKUD413",
             "jpmonettas" => "U018E11HXL3",
-            "jbdtky" => "U018E11HXL3"
+            "jbdtky" => "UQ65EJ86L"
         }
     };
 
@@ -140,13 +140,19 @@ fn nag_revieweres (config : &Config<'_>,
                                   }
                               }).collect::<HashSet<String>>();
 
+
+                          let diff = requested_reviewers
+                              .difference(&reviewers_reviewed);
+
                           info!("Pull request title {:?}", title);
+                          info!("{:?}", url);
                           info!("All requested reviewers {:?}", requested_reviewers);
                           info!("Reviewers that reviewed: {:?}", reviewers_reviewed);
-                          info!("{:?}", url);
+                          info!("Diff: {:?}", diff);
 
-                          requested_reviewers
-                              .difference(&reviewers_reviewed)
+                          // requested_reviewers
+                          //     .difference(&reviewers_reviewed)
+                          diff
                               .into_iter ()
                               .for_each (| user | {
 
@@ -215,7 +221,7 @@ fn make_request_body (title : &str, url : &str, user : &str) -> Value {
             {
                 "type" : "section",
                 "text" : {"type":"mrkdwn",
-                          "text": format!("<@{}> you are requested as a reviewer for {}", user, title)
+                          "text": format!("<@{}>, you are requested as a reviewer for: *{}*", user, title)
                 },
                 "accessory" : {
                     "type" : "button",
