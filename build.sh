@@ -1,26 +1,23 @@
 #!/bin/bash
 
 #--- ARGS
-NAME=nagger
-IMAGE=fbielejec/$NAME
+NAME=fbielejec/nagger
+VERSION=$(git log -1 --pretty=%h)
 
 #--- FUNCTIONS
 
 function build {
   {
-    TAG=$(git log -1 --pretty=%h)
-    IMG=$IMAGE:$TAG
 
     echo "============================================="
-    echo  "Buidling: "$IMG""
+    echo  "Buidling: "$NAME:$VERSION""
     echo "============================================="
 
     cargo build --release
-    docker build -t $IMG -f Dockerfile .
-    docker tag $IMG $IMAGE:latest
+    docker build -t $NAME:$VERSION -f Dockerfile .
 
   } || {
-    echo "EXCEPTION WHEN BUIDLING "$IMG""
+    echo "EXCEPTION WHEN BUIDLING "$NAME""
     exit 1
   }
 
@@ -28,7 +25,8 @@ function build {
 
 function push {
   echo "Pushing: " $IMAGE
-  docker push $IMAGE
+  docker tag $NAME:$VERSION $NAME:latest
+  docker push $NAME:latest
 }
 
 function login {
@@ -37,10 +35,8 @@ function login {
 
 #--- EXECUTE
 
-NAME=$1
-
 login
-build $NAME
-push $NAME
+build
+push
 
 exit $?
