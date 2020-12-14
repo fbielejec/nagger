@@ -26,7 +26,7 @@ function build {
 function push {
   echo "Pushing: " $IMAGE
   docker tag $NAME:$VERSION $NAME:latest
-  docker push $NAME:latest
+  docker push $NAME #:$VERSION
 }
 
 function login {
