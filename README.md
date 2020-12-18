@@ -2,6 +2,8 @@
 
 A tool to remind lazy engineers to review pull requests of their peers.
 
+![alt text](https://github.com/fbielejec/nagger/blob/master/screenshot.png?raw=true)
+
 # run it
 
 Create a file in the [RON format](https://github.com/ron-rs/ron) which maps github user names to slack user names / ids:
