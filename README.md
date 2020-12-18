@@ -1,3 +1,7 @@
+# nagger
+
+A tool to remind lazy engineers to review pull requests of their peers.
+
 # run it
 
 Create a file in the [RON format](https://github.com/ron-rs/ron) which maps github user names to slack user names / ids:
@@ -20,7 +24,7 @@ export REPO_NAME=<name>
 export SLACK_HOOK_URL="https://hooks.slack.com/services/<>/<>/<>"
 export GH_API_TOKEN=<token>
 export TIMER_INTERVAL=86400 # seconds, defaults to 43200 (12hours)
-export USER_ID_PATH="./resources/users.ron"
+export USER_ID_PATH="/home/$USER/users.ron"
 ```
 
 Run it
@@ -33,7 +37,7 @@ cargo build --release
 Also availiable as a docker image:
 
 ```bash
-docker run --name=nagger -v ./resources/users.ron:/nagger/users.ron --rm --env=REPO_OWNER=$REPO_OWNER --env=REPO_NAME=$REPO_NAME --env=SLACK_HOOK_URL=$SLACK_HOOK_URL --env=GH_API_TOKEN=$GH_API_TOKEN --env=USER_ID_PATH=/nagger/users.ron fbielejec/nagger -d
+docker run --name=nagger -v /home/$USER/users.ron:/nagger/users.ron --rm --env=REPO_OWNER=$REPO_OWNER --env=REPO_NAME=$REPO_NAME --env=SLACK_HOOK_URL=$SLACK_HOOK_URL --env=GH_API_TOKEN=$GH_API_TOKEN --env=USER_ID_PATH=/nagger/users.ron fbielejec/nagger -d
 ```
 
 Or with docker compose:
@@ -43,7 +47,7 @@ nagger:
   image: fbielejec/nagger:latest
   container_name: nagger
   volumes:
-    - ./resources/users.ron:/nagger/users.ron
+    - /home/$USER/users.ron:/nagger/users.ron
   environment:
     - REPO_OWNER=$REPO_OWNER
     - REPO_NAME=$REPO_NAME
@@ -52,7 +56,4 @@ nagger:
     - USER_ID_PATH=/nagger/users.ron
     - TIMER_INTERVAL=$TIMER_INTERVAL
 ```
-# nagger
-
-A tool to remind lazy engineers to review pull requests of their peers.
 
