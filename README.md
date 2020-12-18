@@ -1,8 +1,8 @@
 # nagger
 
-A tool to remind lazy engineers to review pull requests of their peers.
-
 ![alt text](https://github.com/fbielejec/nagger/blob/master/screenshot.png?raw=true)
+
+A github crawler and slack bot that reminds lazy engineers to review pull requests of their peers.
 
 # run it
 
