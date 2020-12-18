@@ -1,15 +1,15 @@
-#[macro_use]
-extern crate maplit;
-
 use async_std::prelude::*;
 use async_std::stream;
 use graphql_client::{GraphQLQuery, Response};
 use log::{debug, info, warn, error};
 use reqwest::blocking::Client;
+use ron::de::from_reader;
+use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::env;
+use std::fs::File;
 use std::time::Duration;
 
 type URI = String;
@@ -22,20 +22,28 @@ type URI = String;
 )]
 struct RepoView;
 
-#[derive(Debug)]
-#[derive(Clone)]
-struct Config<'a> {
+#[derive(Debug, Deserialize)]
+struct Users {
+    map: HashMap<String, String>
+}
+
+#[derive(Debug, Clone)]
+struct Config {
     owner: String,
     name: String,
     github_api_token: String,
     slack_hook_url: String,
     log_level: String,
-    user_to_id: HashMap<&'a str, &'a str>,
     interval: u64,
+    user_to_id: HashMap<String, String>
 }
 
 #[async_std::main]
 async fn main() -> Result<(), anyhow::Error> {
+
+    let input_path = get_env_var ("USER_ID_PATH", None)?;
+    let f = File::open(&input_path).unwrap_or_else(|_| panic!("Failed to open file: {}", input_path));
+    let users : Users = from_reader(f)?;
 
     let config = Config {
         owner: get_env_var ("REPO_OWNER",  None)?,
@@ -44,12 +52,7 @@ async fn main() -> Result<(), anyhow::Error> {
         slack_hook_url: get_env_var ("SLACK_HOOK_URL", None)?,
         log_level: get_env_var ("LOGGING_LEVEL", Some (String::from ("info")))?,
         interval: get_env_var ("TIMER_INTERVAL", Some (String::from ("43200")))?.parse::<u64>()?, // 12h
-        // TODO : read from RON file
-        user_to_id: hashmap! {
-            "yenda" => "UHWKUD413",
-            "jpmonettas" => "U018E11HXL3",
-            "jbdtky" => "UQ65EJ86L"
-        }
+        user_to_id: users.map
     };
 
     env::set_var("RUST_LOG", &config.log_level);
@@ -75,11 +78,10 @@ async fn main() -> Result<(), anyhow::Error> {
     Ok (())
 }
 
-fn nag_revieweres (config : &Config<'_>,
+fn nag_revieweres (config : &Config,
                    client : &Client,
                    query : &graphql_client::QueryBody<repo_view::Variables>)
-                   -> Result<(), anyhow::Error>
-{
+                   -> Result<(), anyhow::Error> {
 
     let Config { user_to_id, github_api_token, slack_hook_url, .. } = config;
 
@@ -156,7 +158,7 @@ fn nag_revieweres (config : &Config<'_>,
                               .into_iter ()
                               .for_each (| user | {
 
-                                  let user_id = match user_to_id.get (&user.as_str ()) {
+                                  let user_id = match user_to_id.get (user.as_str ()) {
                                       Some(user_id) => {
                                           user_id
                                       },
