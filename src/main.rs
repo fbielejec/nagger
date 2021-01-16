@@ -72,16 +72,16 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let mut interval = stream::interval(Duration::from_secs(config.interval));
     while interval.next().await.is_some () {
-        nag_revieweres (&config, &client, &query)?;
+        nag_reviewers (&config, &client, &query)?;
     }
 
     Ok (())
 }
 
-fn nag_revieweres (config : &Config,
-                   client : &Client,
-                   query : &graphql_client::QueryBody<repo_view::Variables>)
-                   -> Result<(), anyhow::Error> {
+fn nag_reviewers (config : &Config,
+                  client : &Client,
+                  query : &graphql_client::QueryBody<repo_view::Variables>)
+                  -> Result<(), anyhow::Error> {
 
     let Config { user_to_id, github_api_token, slack_hook_url, .. } = config;
 
