@@ -23,7 +23,7 @@ Export env vars:
 ```bash
 export REPO_OWNER=<owner>
 export REPO_NAME=<name>
-export SLACK_HOOK*URL="https://hooks.slack.com/services/<>/<>/<>"
+export SLACK_HOOK_URL="https://hooks.slack.com/services/<>/<>/<>"
 export GITHUB_API_TOKEN=<token>
 export TIMER_INTERVAL=86400 # seconds, defaults to 43200 (12hours)
 export USER_ID_PATH="/home/$USER/users.ron"
