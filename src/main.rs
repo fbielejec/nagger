@@ -48,7 +48,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let config = Config {
         owner: get_env_var ("REPO_OWNER",  None)?,
         name: get_env_var ("REPO_NAME", None)?,
-        github_api_token: get_env_var ("GH_API_TOKEN", None)?,
+        github_api_token: get_env_var ("GITHUB_API_TOKEN", None)?,
         slack_hook_url: get_env_var ("SLACK_HOOK_URL", None)?,
         log_level: get_env_var ("LOGGING_LEVEL", Some (String::from ("info")))?,
         interval: get_env_var ("TIMER_INTERVAL", Some (String::from ("43200")))?.parse::<u64>()?, // 12h
@@ -92,10 +92,14 @@ fn nag_reviewers (config : &Config,
         .send()
         .unwrap ();
 
+    info!("Response status: {:#?}", &response.status () );
+
     response.error_for_status_ref().unwrap ();
 
     let response_body: Response<repo_view::ResponseData> = response.json().unwrap ();
     let response_data: repo_view::ResponseData = response_body.data.expect("missing response data");
+
+    info!("Response data: {:#?}", &response_data);
 
     response_data
         .repository
@@ -113,6 +117,8 @@ fn nag_reviewers (config : &Config,
 
                       let title = pull_request.title;
                       let url = pull_request.url;
+
+                      info!("Opened PR found: {:#?}", &title);
 
                       if review_requests.total_count > 0 {
 
@@ -184,7 +190,6 @@ fn nag_reviewers (config : &Config,
                                       Err(error) => {
                                           warn!("Error: error posting message to slack webhook: {:#?}", error)
                                       },
-
                                   }
 
                               });

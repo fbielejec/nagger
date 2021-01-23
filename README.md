@@ -23,8 +23,8 @@ Export env vars:
 ```bash
 export REPO_OWNER=<owner>
 export REPO_NAME=<name>
-export SLACK_HOOK_URL="https://hooks.slack.com/services/<>/<>/<>"
-export GH_API_TOKEN=<token>
+export SLACK_HOOK*URL="https://hooks.slack.com/services/<>/<>/<>"
+export GITHUB_API_TOKEN=<token>
 export TIMER_INTERVAL=86400 # seconds, defaults to 43200 (12hours)
 export USER_ID_PATH="/home/$USER/users.ron"
 ```
@@ -39,7 +39,7 @@ cargo build --release
 Also availiable as a docker image:
 
 ```bash
-docker run --name=nagger -v /home/$USER/users.ron:/nagger/users.ron --rm --env=REPO_OWNER=$REPO_OWNER --env=REPO_NAME=$REPO_NAME --env=SLACK_HOOK_URL=$SLACK_HOOK_URL --env=GH_API_TOKEN=$GH_API_TOKEN --env=USER_ID_PATH=/nagger/users.ron fbielejec/nagger -d
+docker run --name=nagger -v /home/$USER/users.ron:/nagger/users.ron --rm --env=REPO_OWNER=$REPO_OWNER --env=REPO_NAME=$REPO_NAME --env=SLACK_HOOK_URL=$SLACK_HOOK_URL --env=GITHUB_API_TOKEN=$GITHUB_API_TOKEN --env=USER_ID_PATH=/nagger/users.ron fbielejec/nagger -d
 ```
 
 Or with docker compose:
@@ -54,8 +54,13 @@ nagger:
     - REPO_OWNER=$REPO_OWNER
     - REPO_NAME=$REPO_NAME
     - SLACK_HOOK_URL=$SLACK_HOOK_URL
-    - GH_API_TOKEN=$GH_API_TOKEN
+    - GITHUB_API_TOKEN=$GITHUB_API_TOKEN
     - USER_ID_PATH=/nagger/users.ron
     - TIMER_INTERVAL=$TIMER_INTERVAL
 ```
 
+# development
+
+```bash
+cargo watch -s "cargo run"
+```
