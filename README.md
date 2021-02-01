@@ -6,7 +6,8 @@ A github crawler and slack bot that reminds lazy engineers to review pull reques
 
 # run it
 
-Create a file in the [RON format](https://github.com/ron-rs/ron) which maps github user names to slack user names / ids:
+Create a file in the [RON format](https://github.com/ron-rs/ron) which maps github user names to slack user names / ids.
+It should also have an array of users to ignored (can be empoty):
 
 ```ron
 (
@@ -14,7 +15,8 @@ Create a file in the [RON format](https://github.com/ron-rs/ron) which maps gith
         "user1" : "id-or-name1",
         "user1" : "id2",
         "user2" : "id3"
-    }
+    },
+    ignores: ["id4"]
 )
 ```
 
