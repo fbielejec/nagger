@@ -1,5 +1,7 @@
 use async_std::prelude::*;
 use async_std::stream;
+use chrono::offset::Utc;
+use chrono::{Weekday, Datelike};
 use graphql_client::{GraphQLQuery, Response};
 use log::{debug, info, warn, error};
 use reqwest::blocking::Client;
@@ -24,7 +26,8 @@ struct RepoView;
 
 #[derive(Debug, Deserialize)]
 struct Users {
-    map: HashMap<String, String>
+    map: HashMap<String, String>,
+    ignores: HashSet<String>
 }
 
 #[derive(Debug, Clone)]
@@ -35,24 +38,26 @@ struct Config {
     slack_hook_url: String,
     log_level: String,
     interval: u64,
-    user_to_id: HashMap<String, String>
+    user_to_id: HashMap<String, String>,
+    ignore_users: HashSet<String>
 }
 
 #[async_std::main]
 async fn main() -> Result<(), anyhow::Error> {
 
-    let input_path = get_env_var ("USER_ID_PATH", None)?;
+    let input_path = get_env_var ("USER_ID_PATH", None);
     let f = File::open(&input_path).unwrap_or_else(|_| panic!("Failed to open file: {}", input_path));
     let users : Users = from_reader(f)?;
 
     let config = Config {
-        owner: get_env_var ("REPO_OWNER",  None)?,
-        name: get_env_var ("REPO_NAME", None)?,
-        github_api_token: get_env_var ("GITHUB_API_TOKEN", None)?,
-        slack_hook_url: get_env_var ("SLACK_HOOK_URL", None)?,
-        log_level: get_env_var ("LOGGING_LEVEL", Some (String::from ("info")))?,
-        interval: get_env_var ("TIMER_INTERVAL", Some (String::from ("43200")))?.parse::<u64>()?, // 12h
-        user_to_id: users.map
+        owner: get_env_var ("REPO_OWNER",  None),
+        name: get_env_var ("REPO_NAME", None),
+        github_api_token: get_env_var ("GITHUB_API_TOKEN", None),
+        slack_hook_url: get_env_var ("SLACK_HOOK_URL", None),
+        log_level: get_env_var ("LOGGING_LEVEL", Some (String::from ("info"))),
+        interval: get_env_var ("TIMER_INTERVAL", Some (String::from ("43200"))).parse::<u64>()?, // 12h
+        user_to_id: users.map,
+        ignore_users: users.ignores
     };
 
     env::set_var("RUST_LOG", &config.log_level);
@@ -72,7 +77,11 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let mut interval = stream::interval(Duration::from_secs(config.interval));
     while interval.next().await.is_some () {
-        nag_reviewers (&config, &client, &query)?;
+        let now = Utc::now ();
+        match now.weekday () {
+            Weekday::Sat | Weekday::Sun => info! ("It's weekend! No nagging today!"),
+            _ => nag_reviewers (&config, &client, &query)?
+        }
     }
 
     Ok (())
@@ -81,22 +90,22 @@ async fn main() -> Result<(), anyhow::Error> {
 fn nag_reviewers (config : &Config,
                   client : &Client,
                   query : &graphql_client::QueryBody<repo_view::Variables>)
-                  -> Result<(), anyhow::Error> {
+                  -> Result<(), anyhow::Error>
+{
 
-    let Config { user_to_id, github_api_token, slack_hook_url, .. } = config;
+    let Config { user_to_id, ignore_users, github_api_token, slack_hook_url, .. } = config;
 
     let response = client
         .post("https://api.github.com/graphql")
         .bearer_auth(github_api_token)
         .json(&query)
-        .send()
-        .unwrap ();
+        .send()?;
 
     info!("Response status: {:#?}", &response.status () );
 
-    response.error_for_status_ref().unwrap ();
+    response.error_for_status_ref()?;
 
-    let response_body: Response<repo_view::ResponseData> = response.json().unwrap ();
+    let response_body: Response<repo_view::ResponseData> = response.json()?;
     let response_data: repo_view::ResponseData = response_body.data.expect("missing response data");
 
     info!("Response data: {:#?}", &response_data);
@@ -109,7 +118,6 @@ fn nag_reviewers (config : &Config,
         .expect("missing pullRequests nodes")
         .into_iter()
         .for_each(| pull_request : Option<repo_view::RepoViewRepositoryPullRequestsNodes> |
-                  // -> Result<String, Error>
                   {
                       let pull_request = pull_request.unwrap ();
                       let review_requests = pull_request.review_requests.unwrap ();
@@ -122,7 +130,7 @@ fn nag_reviewers (config : &Config,
 
                       if review_requests.total_count > 0 {
 
-                          let requested_reviewers =
+                          let requested_reviewers : HashSet<String>=
                               review_requests.nodes.unwrap ().into_iter().map (| review_request | {
                                   match review_request.unwrap ().requested_reviewer.unwrap () {
                                       repo_view::RepoViewRepositoryPullRequestsNodesReviewRequestsNodesRequestedReviewer::User(user) => {
@@ -135,7 +143,7 @@ fn nag_reviewers (config : &Config,
                                   }
                               }).collect::<HashSet<String>>();
 
-                          let reviewers_reviewed =
+                          let reviewers_reviewed : HashSet<String> =
                               reviews.nodes.unwrap ().into_iter().map (| review | {
                                   match review.unwrap ().author.unwrap ().on {
                                       repo_view::RepoViewRepositoryPullRequestsNodesReviewsNodesAuthorOn::User (user) => {
@@ -148,18 +156,17 @@ fn nag_reviewers (config : &Config,
                                   }
                               }).collect::<HashSet<String>>();
 
-
-                          let diff = requested_reviewers
-                              .difference(&reviewers_reviewed);
+                          // remove ignored users
+                          let diff1 : HashSet<String> = requested_reviewers.difference(&ignore_users).into_iter ().map (|it| {String::from (it)}). collect();
+                          let diff = diff1.difference (&reviewers_reviewed);
 
                           info!("Pull request title {:?}", title);
                           info!("{:?}", url);
                           info!("All requested reviewers {:?}", requested_reviewers);
                           info!("Reviewers that reviewed: {:?}", reviewers_reviewed);
+                          info!("Ignored users {:?}", ignore_users);
                           info!("Diff: {:?}", diff);
 
-                          // requested_reviewers
-                          //     .difference(&reviewers_reviewed)
                           diff
                               .into_iter ()
                               .for_each (| user | {
@@ -199,16 +206,13 @@ fn nag_reviewers (config : &Config,
     Ok (())
 }
 
-fn get_env_var (var : &str, default: Option<String> ) -> Result<String, anyhow::Error> {
+fn get_env_var (var : &str, default: Option<String> ) -> String {
     match env::var(var) {
-        Ok (v) => Ok (v),
+        Ok (v) => v,
         Err (_) => {
             match default {
-                None => {
-                    error!("Missing ENV variable: {} not defined in environment", var);
-                    panic! ("Missing ENV variable: {} not defined in environment", var);
-                },
-                Some (d) => Ok (d)
+                None => panic! ("Missing ENV variable: {} not defined in environment", var),
+                Some (d) => d
             }
         }
     }
